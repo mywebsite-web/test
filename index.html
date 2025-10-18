@@ -2752,124 +2752,53 @@
         });
     </script>
 
-  <!-- Firebase SDK -->
-    <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-analytics.js";
+  <!-- ======================
+     FIREBASE CONNECTION
+======================= -->
+<script type="module">
+  // Import Firebase SDKs
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  // Your web app's Firebase configuration
+  // 🔥 Your Firebase Config (replace this with your actual config)
   const firebaseConfig = {
     apiKey: "AIzaSyAGyURqTBIHmhpZfKVjo5ekWXJZtXRJ40w",
     authDomain: "linguistics-19a43.firebaseapp.com",
     projectId: "linguistics-19a43",
     storageBucket: "linguistics-19a43.firebasestorage.app",
     messagingSenderId: "839507423613",
-    appId: "1:839507423613:web:bb55be8e5ab764a2789c14",
-    measurementId: "G-C4LTPLX1TN"
+    appId: "1:839507423613:web:bb55be8e5ab764a2789c14"
   };
 
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const db = getFirestore(app);  // Initialize Firestore
+  const db = getFirestore(app);
 
-  // Helper to get all current data as one object (for saving to Firestore)
-  function getAllData() {
-    return {
-      homeContent,
-      fixtures,
-      updates,
-      players,
-      lineup
-    };
-  }
-
-  // Load all data from Firestore (replaces loadPersistedData)
-  async function loadPersistedData() {
-    try {
-      const configRef = doc(db, "site", "config");  // Document where all data is stored
-      const docSnap = await getDoc(configRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        homeContent = data.homeContent || homeContent;  // Use Firestore data or fallback to defaults
-        fixtures = data.fixtures || fixtures;
-        updates = data.updates || updates;
-        players = data.players || players;
-        lineup = data.lineup || lineup;
-        console.log("Data loaded from Firestore successfully.");
-      } else {
-        console.log("No data in Firestore yet—using defaults and saving initial data.");
-        await saveAll();  // Save defaults if no document exists
-      }
-    } catch (error) {
-      console.error("Error loading from Firestore:", error);
-    }
-  }
-
-  // Save all data to Firestore (replaces saveData, called on edits)
-  async function saveAll() {
-    try {
-      const configRef = doc(db, "site", "config");
-      await setDoc(configRef, getAllData());
-      console.log("All data saved to Firestore.");
-    } catch (error) {
-      console.error("Error saving to Firestore:", error);
-      alert("Failed to save—check console for errors (e.g., network or permissions).");
-    }
-  }
-
-  // Your existing saveData function—update it to call saveAll instead of localStorage
-  function saveData(key) {
-    // localStorage.setItem(key, JSON.stringify(window[key]));  // Comment out localStorage
-    saveAll();  // Save everything to Firestore
-  }
-
-  // Example functions (commented out—you can remove if not needed)
-  /*
+  // 🔹 Load content from Firestore
   async function loadContent() {
-    const docRef = doc(db, "teamInfo", "config");  // Example collection/document
+    const docRef = doc(db, "teamInfo", "ghVhEytxE9IgTV63qs1V"); // Replace with your Firestore document ID
     const docSnap = await getDoc(docRef);
+
     if (docSnap.exists()) {
-      // Example: Set to an element if you add <div id="display"></div> somewhere
-      // document.getElementById("display").innerText = docSnap.data().content;
-      console.log("Loaded content:", docSnap.data().content);
+      document.getElementById("display").innerText = docSnap.data().content;
     } else {
       console.log("No such document!");
     }
   }
 
+  // 🔹 Save content to Firestore
   async function saveContent(newText) {
-    const docRef = doc(db, "teamInfo", "config");
+    const docRef = doc(db, "teamInfo", "YOUR_DOCUMENT_ID");
     await setDoc(docRef, { content: newText });
-    alert("Updated successfully!");
-  }
-  */
-
-  // Initialize on load (make async)
-  async function init() {
-    await loadPersistedData();  // Load from Firestore first
-    // Then run your other init code
-    generateHomeMain();
-    generateHomeStats();
-    generateFeaturedPlayers();
-    generateQuickLinks();
-    generatePlayerCards();
-    generateFixtures();
-    generateUpdates();
-    generateLineup();
-    checkAttendanceStatus();
+    alert("✅ Updated successfully!");
+    loadContent(); // refresh the displayed content
   }
 
-  // Call init on DOM ready (your existing event listener)
-  document.addEventListener('DOMContentLoaded', async function() {
-    await init();  // Now async
-    // Rest of your DOMContentLoaded code...
-  });
+  // Load content when the page loads
+  window.onload = loadContent;
 
-  // Example: Call loadContent if you want (uncomment if using)
-  // window.onload = loadContent;
+  // Attach save function globally (so button onclick works)
+  window.saveContent = saveContent;
 </script>
 
 </body>
