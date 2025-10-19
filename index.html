@@ -2120,29 +2120,39 @@
             });
         }
 
-        // Edit featured players
-        function editFeaturedPlayers() {
-            const password = prompt('Enter admin password:');
-            if (password !== adminPassword) {
-                alert('Incorrect password.');
-                return;
-            }
-            const form = document.getElementById('featuredEditForm');
-            document.getElementById('featuredJson').value = JSON.stringify(homeContent.featured, null, 2);
-            form.style.display = 'block';
-            form.onsubmit = (e) => {
-                e.preventDefault();
-                try {
-                    homeContent.featured = JSON.parse(document.getElementById('featuredJson').value);
-                    saveData('homeContent');
-                    generateFeaturedPlayers();
-                } catch (err) {
-                    alert('Invalid JSON.');
-                }
-                form.style.display = 'none';
-            };
+      // Edit featured players (with Firestore)
+async function editFeaturedPlayers() {
+    const password = prompt('Enter admin password:');
+    if (password !== adminPassword) {
+        alert('Incorrect password.');
+        return;
+    }
+
+    const form = document.getElementById('featuredEditForm');
+    document.getElementById('featuredJson').value = JSON.stringify(homeContent.featured, null, 2);
+    form.style.display = 'block';
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+            // Parse the updated JSON
+            homeContent.featured = JSON.parse(document.getElementById('featuredJson').value);
+
+            // 🔥 Save to Firestore instead of localStorage
+            const docRef = doc(db, "teamInfo", "ghVhEytxE9IgTV63qs1V");
+            await setDoc(docRef, { featured: homeContent.featured }, { merge: true });
+
+            alert('✅ Featured players updated successfully!');
+
+            generateFeaturedPlayers(); // Refresh the display
+        } catch (err) {
+            alert('Invalid JSON.');
+            console.error(err);
         }
 
+        form.style.display = 'none';
+    };
+}
         // Generate quick links
         function generateQuickLinks() {
             const links = document.getElementById('quickLinks');
@@ -2756,49 +2766,97 @@
      FIREBASE CONNECTION
 ======================= -->
 <script type="module">
-  // Import Firebase SDKs
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-  // 🔥 Your Firebase Config (replace this with your actual config)
+  // 🔥 Replace with your real Firebase config
   const firebaseConfig = {
-    apiKey: "AIzaSyAGyURqTBIHmhpZfKVjo5ekWXJZtXRJ40w",
+   apiKey: "AIzaSyAGyURqTBIHmhpZfKVjo5ekWXJZtXRJ40w",
     authDomain: "linguistics-19a43.firebaseapp.com",
     projectId: "linguistics-19a43",
     storageBucket: "linguistics-19a43.firebasestorage.app",
     messagingSenderId: "839507423613",
-    appId: "1:839507423613:web:bb55be8e5ab764a2789c14"
+    appId: "1:839507423613:web:bb55be8e5ab764a2789c14",
+    measurementId: "G-C4LTPLX1TN"
   };
 
-  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // 🔹 Load content from Firestore
-  async function loadContent() {
-    const docRef = doc(db, "teamInfo", "ghVhEytxE9IgTV63qs1V"); // Replace with your Firestore document ID
-    const docSnap = await getDoc(docRef);
+  // 🔹 Load all site data from Firestore
+  async function loadSiteData() {
+    try {
+            const docRef = doc(db, "site", "config");
+      const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists()) {
-      document.getElementById("display").innerText = docSnap.data().content;
-    } else {
-      console.log("No such document!");
+      if (docSnap.exists()) {
+  const data = docSnap.data();
+
+  // ✅ Load Firestore data into your global site variables (with safe defaults)
+  window.homeContent = data.homeContent || {};
+  window.fixtures = data.fixtures || [];
+  window.updates = data.updates || [];
+  window.players = data.players || [];
+  window.lineup = data.lineup || {};
+
+  console.log("✅ Loaded site data from Firestore:", data);
+
+  // 👇 Optionally, re-render the UI using your existing functions
+  if (typeof generateFeaturedPlayers === "function") generateFeaturedPlayers();
+  if (typeof generateFixtures === "function") generateFixtures();
+  if (typeof generateUpdates === "function") generateUpdates();
+
+        // Refresh UI after loading
+        generateHomeMain?.();
+        generateHomeStats?.();
+        generateFeaturedPlayers?.();
+        generateQuickLinks?.();
+        generatePlayerCards?.();
+        generateFixtures?.();
+        generateUpdates?.();
+        generateLineup?.();
+        checkAttendanceStatus?.();
+      } else {
+        console.log("⚠️ No site data in Firestore yet — using defaults");
+      }
+    } catch (error) {
+      console.error("🔥 Error loading site data:", error);
     }
   }
 
-  // 🔹 Save content to Firestore
-  async function saveContent(newText) {
-    const docRef = doc(db, "teamInfo", "YOUR_DOCUMENT_ID");
-    await setDoc(docRef, { content: newText });
-    alert("✅ Updated successfully!");
-    loadContent(); // refresh the displayed content
+  // 🔹 Save all data to Firestore
+  async function saveDataToFirestore() {
+    try {
+      const docRef = doc(db, "site", "config");
+      await setDoc(docRef, {
+        homeContent,
+        fixtures,
+        updates,
+        players,
+        lineup
+      }, { merge: true });
+      console.log("✅ Data saved to Firestore");
+    } catch (error) {
+      console.error("🔥 Error saving data:", error);
+      alert("❌ Failed to save data. Check console for details.");
+    }
   }
 
-  // Load content when the page loads
-  window.onload = loadContent;
+  // 🔹 Replace your local saveData() with this version
+  function saveData(key) {
+    // keep local backup
+    localStorage.setItem(key, JSON.stringify(window[key]));
+    // sync online
+    saveDataToFirestore();
+  }
 
-  // Attach save function globally (so button onclick works)
-  window.saveContent = saveContent;
+  // 🔹 When page loads, fetch data from Firestore first
+  document.addEventListener('DOMContentLoaded', async () => {
+    await loadSiteData();
+  });
+
+  // Expose saveDataToFirestore globally (for debugging or manual trigger)
+  window.saveDataToFirestore = saveDataToFirestore;
 </script>
 
 </body>
