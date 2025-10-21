@@ -1849,7 +1849,24 @@
         <p>&copy; 2025 200lvl Linguistics Team - Department of Sports. All rights reserved.</p>
     </footer>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+        // 🔥 Your Firebase config
+        const firebaseConfig = {
+          apiKey: "AIzaSyAGyURqTBIHmhpZfKVjo5ekWXJZtXRJ40w",
+          authDomain: "linguistics-19a43.firebaseapp.com",
+          projectId: "linguistics-19a43",
+          storageBucket: "linguistics-19a43.firebasestorage.app",
+          messagingSenderId: "839507423613",
+          appId: "1:839507423613:web:bb55be8e5ab764a2789c14",
+          measurementId: "G-C4LTPLX1TN"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
         const adminPassword = 'nallsadmin';
 
         // Home content data
@@ -2016,9 +2033,11 @@
             ]
         };
 
-        // Load persisted data
+        let attendanceData = {};  // { "YYYY-MM-DD": { timestamp: "...", attended: [ids] } }
+
+        // Load persisted data from localStorage (fallback)
         function loadPersistedData() {
-            ['homeContent', 'fixtures', 'updates', 'players', 'lineup'].forEach(key => {
+            ['homeContent', 'fixtures', 'updates', 'players', 'lineup', 'attendanceData'].forEach(key => {
                 const stored = localStorage.getItem(key);
                 if (stored) {
                     window[key] = JSON.parse(stored);
@@ -2026,9 +2045,61 @@
             });
         }
 
-        // Save data
+        // 🔹 Load all data from Firestore (override local if available)
+        async function loadSiteData() {
+            try {
+                const docRef = doc(db, "site", "config");
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    homeContent = data.homeContent || homeContent;
+                    fixtures = data.fixtures || fixtures;
+                    updates = data.updates || updates;
+                    players = data.players || players;
+                    lineup = data.lineup || lineup;
+                    attendanceData = data.attendanceData || attendanceData;
+                    console.log("✅ Loaded from Firestore");
+                } else {
+                    console.log("⚠️ No data in Firestore — using defaults/local");
+                }
+            } catch (error) {
+                console.error("🔥 Load error:", error);
+            }
+            // Refresh UI
+            generateHomeMain();
+            generateHomeStats();
+            generateFeaturedPlayers();
+            generateQuickLinks();
+            generatePlayerCards();
+            generateFixtures();
+            generateUpdates();
+            generateLineup();
+            checkAttendanceStatus();
+        }
+
+        // 🔹 Save all data to Firestore (no auth check)
+        async function saveDataToFirestore() {
+            try {
+                const docRef = doc(db, "site", "config");
+                await setDoc(docRef, {
+                    homeContent,
+                    fixtures,
+                    updates,
+                    players,
+                    lineup,
+                    attendanceData
+                }, { merge: true });
+                console.log("✅ Saved to Firestore");
+            } catch (error) {
+                console.error("🔥 Save error:", error);
+                alert("❌ Save failed. Check if Firestore is in test mode.");
+            }
+        }
+
+        // Save data (local + Firestore)
         function saveData(key) {
             localStorage.setItem(key, JSON.stringify(window[key]));
+            saveDataToFirestore();
         }
 
         // Generate home main text
@@ -2120,39 +2191,29 @@
             });
         }
 
-      // Edit featured players (with Firestore)
-async function editFeaturedPlayers() {
-    const password = prompt('Enter admin password:');
-    if (password !== adminPassword) {
-        alert('Incorrect password.');
-        return;
-    }
-
-    const form = document.getElementById('featuredEditForm');
-    document.getElementById('featuredJson').value = JSON.stringify(homeContent.featured, null, 2);
-    form.style.display = 'block';
-
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        try {
-            // Parse the updated JSON
-            homeContent.featured = JSON.parse(document.getElementById('featuredJson').value);
-
-            // 🔥 Save to Firestore instead of localStorage
-            const docRef = doc(db, "teamInfo", "ghVhEytxE9IgTV63qs1V");
-            await setDoc(docRef, { featured: homeContent.featured }, { merge: true });
-
-            alert('✅ Featured players updated successfully!');
-
-            generateFeaturedPlayers(); // Refresh the display
-        } catch (err) {
-            alert('Invalid JSON.');
-            console.error(err);
+        // Edit featured players
+        function editFeaturedPlayers() {
+            const password = prompt('Enter admin password:');
+            if (password !== adminPassword) {
+                alert('Incorrect password.');
+                return;
+            }
+            const form = document.getElementById('featuredEditForm');
+            document.getElementById('featuredJson').value = JSON.stringify(homeContent.featured, null, 2);
+            form.style.display = 'block';
+            form.onsubmit = (e) => {
+                e.preventDefault();
+                try {
+                    homeContent.featured = JSON.parse(document.getElementById('featuredJson').value);
+                    saveData('homeContent');
+                    generateFeaturedPlayers();
+                } catch (err) {
+                    alert('Invalid JSON.');
+                }
+                form.style.display = 'none';
+            };
         }
 
-        form.style.display = 'none';
-    };
-}
         // Generate quick links
         function generateQuickLinks() {
             const links = document.getElementById('quickLinks');
@@ -2385,8 +2446,6 @@ async function editFeaturedPlayers() {
         document.getElementById('attendanceForm').addEventListener('submit', (e) => {
             e.preventDefault();
             const today = getTodayDate();
-            let attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
-
             if (attendanceData[today]) {
                 document.getElementById('attendanceStatus').textContent = 'Attendance already marked for today. Cannot edit.';
                 return;
@@ -2398,7 +2457,6 @@ async function editFeaturedPlayers() {
                 timestamp: getCurrentTimestamp(),
                 attended: attendedIds
             };
-            localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
 
             attendedIds.forEach(id => {
                 const player = players.find(p => p.id === id);
@@ -2406,6 +2464,8 @@ async function editFeaturedPlayers() {
                     player.attendance++;
                 }
             });
+
+            saveData('attendanceData');
             saveData('players');
 
             document.getElementById('attendanceStatus').textContent = 'Attendance marked successfully and locked for today.';
@@ -2416,7 +2476,6 @@ async function editFeaturedPlayers() {
         function deleteAttendance(date) {
             const password = prompt('Enter admin password to delete this record:');
             if (password === adminPassword) {
-                let attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
                 const record = attendanceData[date];
                 if (record) {
                     record.attended.forEach(id => {
@@ -2425,10 +2484,10 @@ async function editFeaturedPlayers() {
                             player.attendance = Math.max(0, player.attendance - 1);
                         }
                     });
-                    saveData('players');
 
                     delete attendanceData[date];
-                    localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                    saveData('attendanceData');
+                    saveData('players');
                     displayHistoricalAttendance();
                     alert('Record deleted successfully.');
                 }
@@ -2440,7 +2499,6 @@ async function editFeaturedPlayers() {
         function displayHistoricalAttendance() {
             const container = document.getElementById('historicalAttendance');
             container.innerHTML = '<h3>Historical Attendance Records</h3>';
-            const attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
             const dates = Object.keys(attendanceData).sort((a, b) => new Date(b) - new Date(a)); // Newest first
 
             dates.forEach(date => {
@@ -2472,7 +2530,6 @@ async function editFeaturedPlayers() {
         function checkAttendanceStatus() {
             const today = getTodayDate();
             document.getElementById('currentDate').textContent = `Date: ${today}`;
-            const attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
             if (attendanceData[today]) {
                 document.getElementById('attendanceStatus').textContent = 'Attendance already marked for today. Cannot edit.';
             }
@@ -2502,70 +2559,6 @@ async function editFeaturedPlayers() {
             });
         }
 
-        // Generate lineup
-        function generateLineup() {
-            const starting = document.getElementById('startingLineup');
-            const subs = document.getElementById('substitutes');
-            starting.innerHTML = '';
-            subs.innerHTML = '';
-            lineup.startingXI.forEach(player => {
-                const item = document.createElement('div');
-                item.className = 'lineup-item';
-                item.innerHTML = `
-                    <div class="lineup-name">${player.name}</div>
-                    <div>
-                        <div class="lineup-position">${player.position}</div>
-                        <div class="lineup-jersey">Jersey #${player.jersey}</div>
-                    </div>
-                `;
-                item.onclick = () => {
-                    const pIndex = players.findIndex(p => p.nickname === player.name || p.name.includes(player.name));
-                    if (pIndex !== -1) openPlayerModal(pIndex);
-                };
-                starting.appendChild(item);
-            });
-            lineup.substitutes.forEach(player => {
-                const item = document.createElement('div');
-                item.className = 'lineup-item';
-                item.innerHTML = `
-                    <div class="lineup-name">${player.name}</div>
-                    <div>
-                        <div class="lineup-position">${player.position}</div>
-                        <div class="lineup-jersey">Jersey #${player.jersey}</div>
-                    </div>
-                `;
-                item.onclick = () => {
-                    const pIndex = players.findIndex(p => p.nickname === player.name || p.name.includes(player.name));
-                    if (pIndex !== -1) openPlayerModal(pIndex);
-                };
-                subs.appendChild(item);
-            });
-        }
-
-        // Edit lineup
-        function editLineup() {
-            const password = prompt('Enter admin password:');
-            if (password !== adminPassword) {
-                alert('Incorrect password.');
-                return;
-            }
-            const form = document.getElementById('lineupEditForm');
-            document.getElementById('lineupJson').value = JSON.stringify(lineup, null, 2);
-            form.style.display = 'block';
-            form.onsubmit = (e) => {
-                e.preventDefault();
-                try {
-                    lineup = JSON.parse(document.getElementById('lineupJson').value);
-                    saveData('lineup');
-                    generateLineup();
-                } catch (err) {
-                    alert('Invalid JSON.');
-                }
-                form.style.display = 'none';
-            };
-        }
-
-        // Show/hide sections
         function showSection(sectionId) {
             document.querySelectorAll('.section').forEach(section => {
                 section.classList.remove('active');
@@ -2721,19 +2714,10 @@ async function editFeaturedPlayers() {
         }
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            loadPersistedData();
+        document.addEventListener('DOMContentLoaded', async function() {
+            loadPersistedData(); // Load local first
+            await loadSiteData(); // Override with Firestore
             initializeSections();
-            generateHomeMain();
-            generateHomeStats();
-            generateFeaturedPlayers();
-            generateQuickLinks();
-            generatePlayerCards();
-            generateFixtures();
-            generateUpdates();
-            generateLineup();
-            checkAttendanceStatus();
-
             // Mobile menu toggle
             const mobileMenu = document.querySelector('.mobile-menu');
             if (mobileMenu) {
@@ -2760,104 +2744,23 @@ async function editFeaturedPlayers() {
                 });
             });
         });
+        window.editHomeMain = editHomeMain;
+        window.editHomeStats = editHomeStats;
+        window.editFeaturedPlayers = editFeaturedPlayers;
+        window.editQuickLinks = editQuickLinks;
+        window.editFixtures = editFixtures;
+        window.editUpdates = editUpdates;
+        window.editLineup = editLineup;
+        window.adminLogin = adminLogin;
+        window.deleteAttendance = deleteAttendance;
+        window.openPlayerModal = openPlayerModal;
+        window.editPlayerStats = editPlayerStats;
+        window.closeModal = closeModal;
+        window.openLightbox = openLightbox;
+        window.closeLightbox = closeLightbox;
+        window.openMobileNav = openMobileNav;
+        window.closeMobileNav = closeMobileNav;
+        window.showSection = showSection;
     </script>
-
-  <!-- ======================
-     FIREBASE CONNECTION
-======================= -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-
-  // 🔥 Replace with your real Firebase config
-  const firebaseConfig = {
-   apiKey: "AIzaSyAGyURqTBIHmhpZfKVjo5ekWXJZtXRJ40w",
-    authDomain: "linguistics-19a43.firebaseapp.com",
-    projectId: "linguistics-19a43",
-    storageBucket: "linguistics-19a43.firebasestorage.app",
-    messagingSenderId: "839507423613",
-    appId: "1:839507423613:web:bb55be8e5ab764a2789c14",
-    measurementId: "G-C4LTPLX1TN"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  // 🔹 Load all site data from Firestore
-  async function loadSiteData() {
-    try {
-            const docRef = doc(db, "site", "config");
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-  const data = docSnap.data();
-
-  // ✅ Load Firestore data into your global site variables (with safe defaults)
-  window.homeContent = data.homeContent || {};
-  window.fixtures = data.fixtures || [];
-  window.updates = data.updates || [];
-  window.players = data.players || [];
-  window.lineup = data.lineup || {};
-
-  console.log("✅ Loaded site data from Firestore:", data);
-
-  // 👇 Optionally, re-render the UI using your existing functions
-  if (typeof generateFeaturedPlayers === "function") generateFeaturedPlayers();
-  if (typeof generateFixtures === "function") generateFixtures();
-  if (typeof generateUpdates === "function") generateUpdates();
-
-        // Refresh UI after loading
-        generateHomeMain?.();
-        generateHomeStats?.();
-        generateFeaturedPlayers?.();
-        generateQuickLinks?.();
-        generatePlayerCards?.();
-        generateFixtures?.();
-        generateUpdates?.();
-        generateLineup?.();
-        checkAttendanceStatus?.();
-      } else {
-        console.log("⚠️ No site data in Firestore yet — using defaults");
-      }
-    } catch (error) {
-      console.error("🔥 Error loading site data:", error);
-    }
-  }
-
-  // 🔹 Save all data to Firestore
-  async function saveDataToFirestore() {
-    try {
-      const docRef = doc(db, "site", "config");
-      await setDoc(docRef, {
-        homeContent,
-        fixtures,
-        updates,
-        players,
-        lineup
-      }, { merge: true });
-      console.log("✅ Data saved to Firestore");
-    } catch (error) {
-      console.error("🔥 Error saving data:", error);
-      alert("❌ Failed to save data. Check console for details.");
-    }
-  }
-
-  // 🔹 Replace your local saveData() with this version
-  function saveData(key) {
-    // keep local backup
-    localStorage.setItem(key, JSON.stringify(window[key]));
-    // sync online
-    saveDataToFirestore();
-  }
-
-  // 🔹 When page loads, fetch data from Firestore first
-  document.addEventListener('DOMContentLoaded', async () => {
-    await loadSiteData();
-  });
-
-  // Expose saveDataToFirestore globally (for debugging or manual trigger)
-  window.saveDataToFirestore = saveDataToFirestore;
-</script>
-
 </body>
 </html>
